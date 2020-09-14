@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gazzetta1
+spec:
+  containers:
+  - name: gazzetta1
+    image: efsadsreg.azurecr.io/readall18full
+  restartPolicy: Never
