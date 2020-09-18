@@ -9,33 +9,24 @@
 
 ######################## script: please do not change ########################
 ##packages
-if (!require(AzureGraph)) install.packages('AzureGraph')
-if (!require(AzureAuth)) install.packages('AzureAuth')
-if (!require(httpuv)) install.packages('httpuv')
-if (!require(jsonlite)) install.packages('jsonlite')
-if (!require(caTools)) install.packages('caTools')
-if (!require(tidyverse)) install.packages('tidyverse')
-if (!require(httr)) install.packages('httr')
-if (!require(collections)) install.packages('collections')
-library(AzureGraph, warn.conflicts = FALSE)
-library(httpuv, warn.conflicts = FALSE)
-library(AzureAuth, warn.conflicts = FALSE)
-library(jsonlite, warn.conflicts = FALSE)
-library(caTools, warn.conflicts = FALSE)
-library(tidyverse, warn.conflicts = FALSE)
-library(httr, warn.conflicts = FALSE)
-library(collections, warn.conflicts = FALSE)
-if (!require(gtools)) install.packages('gtools')
+library(AzureGraph)
+library(AzureAuth)
+library(jsonlite)
+library(tidyverse)
+library(bizdays)
+library(httr)
+library(functional)
 library(gtools)
-if (!require(stringi)) install.packages('stringi')
 library (stringi)
+library(httpuv)
+library(collections)
+
 
 #scopes
 # needed for the login; indicates the permissions
 scopes <- c("https://graph.microsoft.com/User.Read",
             "https://graph.microsoft.com/Mail.ReadWrite",
             "offline_access")
-
 
 #TX_MARKER
 # regex pattern that recognizes TX ids
@@ -54,7 +45,7 @@ user_list = list(user_names = c('AG', 'MN', 'DP', 'ZV', 'BG', 'unassigned'),
                  user_ids = c('3963a97a-43e7-43e7-b71a-a710b7bbc4fa','7900481f-40d8-4e73-868b-6db453b53aa4','0db6b33a-4615-43af-85de-cab76eb2628c','37a32389-1aac-481c-a1fc-e80ab2e5aa34', 'ab4bbfc2-6d90-44f6-b832-86ae7c6464a2', 'NA'))
 user_tib = as_tibble(user_list)
 
-
+print(system("ifconfig -a", intern=TRUE))
 ##global objects
 #execute_login
 # performs the login and gets permissions; this cannot be done in a function
@@ -697,9 +688,6 @@ extract_task_tbl = function(plan_name_and_id) {
     tib_inv_tasks
   }
 }
-
-if (!require(bizdays)) install.packages('bizdays')
-library(bizdays)
 
 efsaholidays = c("2000-01-01", "2020-04-09", "2020-04-10", 
                  "2020-04-13", "2020-05-01", "2020-05-21", 

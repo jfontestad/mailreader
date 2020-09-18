@@ -9,11 +9,7 @@
 #gather_descriptions indicates if the descriptions of the active tasks shall be downloaded
 #in 15% of cases gathering descriptions leads to an error message
 
-load(paste("C:\\Users\\",Sys.getenv("USERNAME"), "\\OneDrive - EFSA\\Automation\\myEnvironmentMailReader.RData",sep=""))
-
-logFile = file(paste("C:\\Users\\",Sys.getenv("USERNAME"), "\\OneDrive - EFSA\\Automation\\logs\\",gsub(":", "-", Sys.time())," myEnvironmentMailReader.log",sep=""))
-sink(logFile, type = c("output"), append = TRUE)
-sink(logFile, type = c("message"), append = TRUE)
+load(paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
 
 print(paste("*** Mail reader starting at: ", Sys.time()))
 
@@ -71,14 +67,11 @@ tsta_member_mails = c("alessandro.gazzetta@efsa.europa.eu",
                       "despoina.papadopoulou@efsa.europa.eu")
 
 
-source(paste("C:\\Users\\",Sys.getenv("USERNAME"), "\\OneDrive - EFSA\\Automation\\MailReaderCreator.R",sep=""))
+source(paste("/home/docker/MailReaderCreator.R",sep=""))
 
-save.image(file=paste("C:\\Users\\",Sys.getenv("USERNAME"), "\\OneDrive - EFSA\\Automation\\myEnvironmentMailReader.RData",sep=""))
+save.image(file=paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
 
 print("image saved, job completed")
 
 print(paste("*** Mail reader closing at: ", Sys.time()))
 
-#restore output to console
-sink(type="output") 
-sink(type="message")
