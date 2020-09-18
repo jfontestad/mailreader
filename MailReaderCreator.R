@@ -45,16 +45,15 @@ user_list = list(user_names = c('AG', 'MN', 'DP', 'ZV', 'BG', 'unassigned'),
                  user_ids = c('3963a97a-43e7-43e7-b71a-a710b7bbc4fa','7900481f-40d8-4e73-868b-6db453b53aa4','0db6b33a-4615-43af-85de-cab76eb2628c','37a32389-1aac-481c-a1fc-e80ab2e5aa34', 'ab4bbfc2-6d90-44f6-b832-86ae7c6464a2', 'NA'))
 user_tib = as_tibble(user_list)
 
-print(system("ifconfig -a", intern=TRUE))
 ##global objects
 #execute_login
 # performs the login and gets permissions; this cannot be done in a function
 #get login token using AzureAuth for reading emails
 # exact permissions are defined above in scopes
-token=AzureAuth::get_azure_token(scopes,tenant = "406a174b-e315-48bd-aa0a-cdaddc44250b","970559dd-4ac3-488f-a7fe-9cdf47a66233",version = 2, use_cache = TRUE) 
-
+token=AzureAuth::get_azure_token(scopes,tenant = "406a174b-e315-48bd-aa0a-cdaddc44250b","970559dd-4ac3-488f-a7fe-9cdf47a66233",version = 2, auth_type="device_code", password="jbNLB_br7iBFoNB-_~o35Gd_35fvbxP72S", use_cache = TRUE) 
+print("going to refresh azureauth token")
 token$refresh()
-
+print("refreshed azureauth token; going to request azuregraph token")
 #get login token using AzureGraph for planner and sharepoint
 if (!exists("me")) {
   gr=create_graph_login(auth_type="device_code")
