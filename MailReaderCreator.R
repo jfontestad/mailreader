@@ -50,9 +50,13 @@ user_tib = as_tibble(user_list)
 # performs the login and gets permissions; this cannot be done in a function
 #get login token using AzureAuth for reading emails
 # exact permissions are defined above in scopes
-token=AzureAuth::get_azure_token(scopes,tenant = "406a174b-e315-48bd-aa0a-cdaddc44250b","970559dd-4ac3-488f-a7fe-9cdf47a66233",version = 2, auth_type="device_code", password="jbNLB_br7iBFoNB-_~o35Gd_35fvbxP72S", use_cache = TRUE) 
+if (!exists("token")) {
+print("going to get azure token")
+  token=AzureAuth::get_azure_token(scopes,tenant = "406a174b-e315-48bd-aa0a-cdaddc44250b","970559dd-4ac3-488f-a7fe-9cdf47a66233",version = 2, auth_type="device_code", password="jbNLB_br7iBFoNB-_~o35Gd_35fvbxP72S", use_cache = TRUE) 
+} else {
 print("going to refresh azureauth token")
-token$refresh()
+  token$refresh()
+}
 print("refreshed azureauth token; going to request azuregraph token")
 #get login token using AzureGraph for planner and sharepoint
 if (!exists("me")) {
