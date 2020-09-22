@@ -11,6 +11,13 @@ resources:
 variables:
   tag: '$(Build.BuildId)'
 
+- task: DownloadBuildArtifacts@0
+  inputs:
+    buildType: 'current'
+    downloadType: 'single'
+    artifactName: 'buildresult'
+    downloadPath: '$(System.ArtifactsDirectory)'
+    
 stages:
 - stage: Build
   displayName: Build image
@@ -27,9 +34,3 @@ stages:
         dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
         tags: |
           $(tag)
-- task: DownloadBuildArtifacts@0
-  inputs:
-    buildType: 'current'
-    downloadType: 'single'
-    artifactName: 'buildresult'
-    downloadPath: '$(System.ArtifactsDirectory)'
