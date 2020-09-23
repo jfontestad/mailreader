@@ -20,6 +20,7 @@ library(gtools)
 library (stringi)
 library(httpuv)
 library(collections)
+library(caTools)
 
 
 #scopes
