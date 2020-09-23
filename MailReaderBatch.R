@@ -9,6 +9,7 @@
 #gather_descriptions indicates if the descriptions of the active tasks shall be downloaded
 #in 15% of cases gathering descriptions leads to an error message
 
+#load environment a first time to overwrite the configuration variables set below
 load(paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
 
 print(paste("*** Mail reader starting at: ", Sys.time()))
@@ -66,12 +67,33 @@ tsta_member_mails = c("alessandro.gazzetta@efsa.europa.eu",
                       "mavra.nikolopoulou@efsa.europa.eu",
                       "despoina.papadopoulou@efsa.europa.eu")
 
-
-source(paste("/home/docker/MailReaderCreator.R",sep=""))
-
+#save image to make sure the previous variables are saved
 save.image(file=paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
 
-print("image saved, job completed")
+#once-off execution
+#source(paste("/home/docker/MailReaderCreator.R",sep=""))
+#save.image(file=paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
+#print("image saved, job completed")
+#print(paste("*** Mail reader closing at: ", Sys.time()))
 
-print(paste("*** Mail reader closing at: ", Sys.time()))
+#repeated execution
+for (count in seq(32)) {
+    print(paste("start iteration ", count, sep=""))
+    load(paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
 
+    print(paste("*** Mailreader starting at: ", Sys.time()))
+
+    gather_descriptions = FALSE
+
+    source(paste("/home/docker/MailReaderCreator.R",sep=""))
+
+    save.image(file=paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
+
+    print("image saved, job completed")
+
+    Sys.sleep(900) #15 minutes intervals
+    
+    print(paste("*** Mail Reader closing at: ", Sys.time()))
+}
+
+print(paste("*** Mail Reader fully closing at: ", Sys.time()))
