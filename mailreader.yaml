@@ -1,18 +1,9 @@
 apiVersion: v1
 kind: Pod
 metadata:
-<<<<<<< HEAD
-  name: gazzettamail1
+  name: gazzettamail
 spec:
   containers:
-  - name: gazzettamail1
-    image: efsadsreg.azurecr.io/mailreader04checktoken
+  - name: gazzettamail
+    image: efsadsreg.azurecr.io/mailreader05schedule
   restartPolicy: Never
-=======
-  name: gazzettamail2
-spec:
-  containers:
-  - name: gazzettamail2
-    image: efsadsreg.azurecr.io/mailreader04checktoken
-  restartPolicy: Never
->>>>>>> 6d5006802717df44a1d7f774d2a5c5acd2feeec2
