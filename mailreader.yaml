@@ -6,4 +6,3 @@ spec:
   containers:
   - name: gazzettamail
     image: efsadsreg.azurecr.io/mailreader05schedule
-  restartPolicy: Never
