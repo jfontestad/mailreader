@@ -438,7 +438,10 @@ write_mail = function (curr_msg, tx_id = "") {
   }
 
   #write the MIME message manually
-  write(gsub("\r\n", "\n", mime_message), file_name)
+  
+  #write the file; in windows this only works with the gsub; in linux (docker k)
+  #write(gsub("\r\n", "\n", mime_message), file_name)
+  write(mime_message, file_name)
   file_name
 }
 
