@@ -837,9 +837,9 @@ taskify = function(curr_msg) {
                    sep="")
 
 #todo: gsub to clean filename
-  theFilename = trimws(substr(theTitle, 1, 40))
+  theFilename = str_replace_all(str_replace_all(str_replace_all(str_replace_all(str_replace_all(trimws(substr(theTitle, 1, 40)), ":|/|&|\"|<|>", " "), fixed("*"), " "), fixed("?"), " "), fixed("\\"), " "), fixed("|"), " ")
   
-  theShortFilename = trimws(substr(theTitle, 1, 30))
+  theShortFilename = trimws(substr(theFilename, 1, 30))
       
   all_ids = retrieve_plan_id(c(plan_for_tx(tx_id), team_for_tx(tx_id)))
 
