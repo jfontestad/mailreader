@@ -1,5 +1,4 @@
 #MailReader.R
-# v 202008251022
 # Script that pre-elaborates mails and
 #  uniteresting ones: set to "read"
 #  transactions
@@ -398,7 +397,6 @@ extract_name_of_sender = function (curr_msg) {
 }
 
 #generate_file_name
-#todo: use the sent instead of the systime; who cares of the time when you run the script; sent date time is relevant
 generate_file_name = function (curr_msg, tx_id = "") {
   if (tx_id != "") {
     paste(format(strptime(curr_msg$sentDateTime, format="%Y-%m-%dT%H:%M:%SZ") + 7200, "%Y%m%d %H%M%S"), " ", extract_name_of_sender(curr_msg), " ", substring(str_replace_all(curr_msg$subject, "[^[:alnum:]]", " "), 1, 30), " (", tx_id, ")", ".eml", sep="")
@@ -418,6 +416,7 @@ generate_folder_name = function (curr_msg) {
 #  does not save attachments
 #  .eml is produced "manually"
 #  works only for html mails for now
+# returns the size of the raw mail (needed because graph is alloes to write only 4MB to Sharepoint)
 # sources
 #  https://mailchannels.zendesk.com/hc/en-us/articles/360005491712-How-to-Create-an-EML-File
 #  https://docs.microsoft.com/en-us/graph/outlook-get-mime-message
@@ -432,14 +431,20 @@ write_mail = function (curr_msg, tx_id = "") {
   
   file_name = generate_file_name(curr_msg, tx_id = tx_id)
 
+  #if file is very large we cannot save to sharepoint; we write a small file just to inform the user #bm
+  if (nchar(mime_message) > 4000000) {
+    file_name = gsub(".eml", " large mail see in outlook.html", file_name, fixed = TRUE)
+    mime_message = curr_msg$body$content
+  }
+
   #write the MIME message manually
   write(gsub("\r\n", "\n", mime_message), file_name)
+  file_name
 }
 
 #delete_temp_mail_file
 # deletes the temporary copy of the mail file
-delete_temp_mail_file = function(curr_msg, tx_id = "") {
-  file_name = generate_file_name(curr_msg, tx_id = tx_id)
+delete_temp_mail_file = function(file_name) {
   if (file.exists(file_name)) file.remove(file_name)  
 }
 
@@ -560,11 +565,9 @@ team_for_tx = function (tx_id) {
 
 #plan_for_tx
 plan_for_tx = function (tx_id) {
-  print(paste("seeking plan for marker", substring(tx_id, 3,3)))
   temp = plans_and_groups %>% 
     filter(Marker == substring(tx_id, 3,3)) %>%
     select(Plan)
-  print(paste("Plan for marker", tx_id, "is:", temp[[1]]))
   temp[[1]]
 }
 
@@ -881,32 +884,34 @@ taskify = function(curr_msg) {
                          '@microsoft.graph.conflictBehavior' = "rename")
   new_folder_json = toJSON (new_folder_obj, auto_unbox = TRUE)
   new_folder_json = str_replace(new_folder_json, fixed("[]"), "{}")
-#todo: pay_folder are fixed strings in invoice importer; here they have to be found using info from plans_and_groups
   new_folder = call_graph_url(me$token,paste("https://graph.microsoft.com/beta/drives/",drive_id,"/items/",parent_folder$id,"/children", sep=""),  
                               body=new_folder_json, http_verb=c ("POST"),encode = "raw")  
   
   # save the mail to the new folder
   print(paste("Saving the taskify mail to SP with subject ", curr_msg$subject, sep=""))
   # save mail to hd
-  write_mail(curr_msg, tx_id = tx_id)
+  mail_file_name = write_mail(curr_msg, tx_id = tx_id)
   # upload message to sp
-  upload_file(generate_file_name(curr_msg, tx_id = tx_id), "message/rfc822", new_folder$id, drive_id)      
-  # if there are attachments: save attachments to hd
-  #                           create subfolder for attachments
-  #                           upload attachments
-  if (curr_msg$hasAttachments) {
-    attachment_names_and_types = save_attachments(curr_msg)
-    new_folder_att = create_subfolder(generate_folder_name(curr_msg), new_folder$id, drive_id)
-    sapply(attachment_names_and_types, function (x) upload_file(x[[1]],x[[2]], new_folder_att$id, drive_id))
-    delete_temp_attachment_files(attachment_names_and_types)
+  if (grepl(" large mail see in outlook.html", mail_file_name)) {
+    new_file_id = upload_file(mail_file_name, "text/html", folder_id, drive_id)    
+  } else {
+    upload_file(generate_file_name(curr_msg, tx_id = tx_id), "message/rfc822", new_folder$id, drive_id)      
+    # if there are attachments: save attachments to hd
+    #                           create subfolder for attachments
+    #                           upload attachments
+    if (curr_msg$hasAttachments) {
+      attachment_names_and_types = save_attachments(curr_msg)
+      new_folder_att = create_subfolder(generate_folder_name(curr_msg), new_folder$id, drive_id)
+      sapply(attachment_names_and_types, function (x) upload_file(x[[1]],x[[2]], new_folder_att$id, drive_id))
+      delete_temp_attachment_files(attachment_names_and_types)
+    }
   }
   #delete the local copy
-  delete_temp_mail_file(curr_msg, tx_id = tx_id)
+  delete_temp_mail_file(mail_file_name)
 
   #prepare the links
   folder_url_enc = str_replace_all(new_folder$webUrl, fixed(":"), "%3A")
   folder_url_enc = str_replace_all(folder_url_enc, fixed("."), "%2E")
-  
   
   ##insert conversation post
   group_id = all_ids[2]
@@ -984,8 +989,10 @@ taskify = function(curr_msg) {
                    body=body_json, 
                    http_verb=c ("PATCH"),encode = "raw")
   }
-
   
+  #set read anyway, even if must read
+  #otherwise there will be a loop
+  set_read_flag(curr_msg)
 }
 
 
@@ -1078,20 +1085,24 @@ elaborate_tx = function(curr_msg) {
         if (is.null(saved_mail)) {
           print(paste("Transferring to SP mail with subject ", curr_msg$subject, sep=""))
           # save mail to hd
-          write_mail(curr_msg)
-          # upload message to sp
-          new_file_id = upload_file(generate_file_name(curr_msg), "message/rfc822", folder_id, drive_id)      
-          # if there are attachments: save attachments to hd
-          #                           create subfolder for attachments
-          #                           upload attachments
-          if (curr_msg$hasAttachments) {
-            attachment_names_and_types = save_attachments(curr_msg)
-            new_folder = create_subfolder(generate_folder_name(curr_msg), folder_id, drive_id)
-            sapply(attachment_names_and_types, function (x) upload_file(x[[1]],x[[2]], new_folder$id, drive_id))
-            delete_temp_attachment_files(attachment_names_and_types)
+          mail_file_name = write_mail(curr_msg)
+          # upload message to sp #bm
+          if (grepl(" large mail see in outlook.html", mail_file_name)) {
+            new_file_id = upload_file(mail_file_name, "text/html", folder_id, drive_id)      
+          } else {
+            new_file_id = upload_file(mail_file_name, "message/rfc822", folder_id, drive_id)      
+            # if there are attachments: save attachments to hd
+            #                           create subfolder for attachments
+            #                           upload attachments
+            if (curr_msg$hasAttachments) {
+              attachment_names_and_types = save_attachments(curr_msg)
+              new_folder = create_subfolder(generate_folder_name(curr_msg), folder_id, drive_id)
+              sapply(attachment_names_and_types, function (x) upload_file(x[[1]],x[[2]], new_folder$id, drive_id))
+              delete_temp_attachment_files(attachment_names_and_types)
+            }
+            #delete the local copy
+            delete_temp_mail_file(mail_file_name)
           }
-          #delete the local copy
-          delete_temp_mail_file(curr_msg)
           # flag the planner task, but only if the message was not sent by the team
           if(!detect_own_message(curr_msg)) {
             update_inv_task(task_id)
