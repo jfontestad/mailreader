@@ -359,9 +359,11 @@ search_tx_drive = function(name_component, team_name) {
 search_tx_folder = function(name_component, group_drive_id) {
   search_result = call_graph_url(me$token,
                                  paste("https://graph.microsoft.com/v1.0/drives/",group_drive_id,"/root/search(q='{",name_component,"}')", sep="")) 
-  hits = sapply(search_result$value, function(x) !is.null(x$folder))
-  if (TRUE %in% hits) {
-    result_id = search_result$value[[which(hits)[[1]]]]$id
+  folders = sapply(search_result$value, function(x) !is.null(x$folder))
+  if (TRUE %in% folders) {
+    result_id = search_result$value[[which(folders)[[1]]]]$id
+  } else { #no folder with this tx found
+    result_id = ""
   }
   result_id
 }
@@ -400,7 +402,6 @@ extract_name_of_sender = function (curr_msg) {
 }
 
 #generate_file_name
-#todo: use the sent instead of the systime; who cares of the time when you run the script; sent date time is relevant
 generate_file_name = function (curr_msg, tx_id = "") {
   if (tx_id != "") {
     paste(format(strptime(curr_msg$sentDateTime, format="%Y-%m-%dT%H:%M:%SZ") + 7200, "%Y%m%d %H%M%S"), " ", extract_name_of_sender(curr_msg), " ", substring(str_replace_all(curr_msg$subject, "[^[:alnum:]]", " "), 1, 30), " (", tx_id, ")", ".eml", sep="")
@@ -420,6 +421,7 @@ generate_folder_name = function (curr_msg) {
 #  does not save attachments
 #  .eml is produced "manually"
 #  works only for html mails for now
+# returns the size of the raw mail (needed because graph is alloes to write only 4MB to Sharepoint)
 # sources
 #  https://mailchannels.zendesk.com/hc/en-us/articles/360005491712-How-to-Create-an-EML-File
 #  https://docs.microsoft.com/en-us/graph/outlook-get-mime-message
@@ -434,14 +436,23 @@ write_mail = function (curr_msg, tx_id = "") {
   
   file_name = generate_file_name(curr_msg, tx_id = tx_id)
 
+  #if file is very large we cannot save to sharepoint; we write a small file just to inform the user #bm
+  if (nchar(mime_message) > 4000000) {
+    file_name = gsub(".eml", " large mail see in outlook.html", file_name, fixed = TRUE)
+    mime_message = curr_msg$body$content
+  }
+
   #write the MIME message manually
-  write(gsub("\r\n", "\n", mime_message), file_name)
+  
+  #write the file; in windows this only works with the gsub; in linux (docker k)
+  #write(gsub("\r\n", "\n", mime_message), file_name)
+  write(mime_message, file_name)
+  file_name
 }
 
 #delete_temp_mail_file
 # deletes the temporary copy of the mail file
-delete_temp_mail_file = function(curr_msg, tx_id = "") {
-  file_name = generate_file_name(curr_msg, tx_id = tx_id)
+delete_temp_mail_file = function(file_name) {
   if (file.exists(file_name)) file.remove(file_name)  
 }
 
@@ -562,11 +573,9 @@ team_for_tx = function (tx_id) {
 
 #plan_for_tx
 plan_for_tx = function (tx_id) {
-  print(paste("seeking plan for marker", substring(tx_id, 3,3)))
   temp = plans_and_groups %>% 
     filter(Marker == substring(tx_id, 3,3)) %>%
     select(Plan)
-  print(paste("Plan for marker", tx_id, "is:", temp[[1]]))
   temp[[1]]
 }
 
@@ -749,99 +758,8 @@ update_inv_task = function(p_id, p_etag, new_assignee) {
                  http_verb=c ("PATCH"),encode = "raw")
 } 
 
-#taskify
-taskify = function(curr_msg) {
-  print(paste("taskify:", curr_msg$subject))
-  thePlan = strsplit(curr_msg$subject, " ")[[1]][[2]]
-  #use the plan to find the other information from the parameter table
-  thePlanName = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Plan))[[1]]
-  theMarker = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Marker))[[1]]
-  
-  tx_id = paste("TX", theMarker, str_pad(round(runif(1) * 1000000,0), 6, pad=0), sep="")
-
-  raw_title = trimws(str_remove(str_remove(curr_msg$subject, "Taskify"), "TX[A-Z]"))
-  
-  #extract bucket if it was provided
-  temp = extract_parameter(raw_title, "BUCKET")
-  theBucket = temp[1]
-  raw_title = temp[2]
-  
-  if(theBucket == "")  { #if no bucket was provided we use the deault bucket
-    theBucket = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Defbucket))[[1]]
-  }  
-
-  #extract channel  if it was provided
-  temp = extract_parameter(raw_title, "CHANNEL")
-  theChannel = temp[1]
-  raw_title = temp[2]
-  
-  if(theChannel == "")  { #if no bucket was provided we use the deault bucket
-    theChannel = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(DefChannel))[[1]]
-  }  
-
-  #extract start if it was provided
-  temp = extract_parameter(raw_title, "START")
-  theStartDate = temp[1]
-  raw_title = temp[2]
-  
-  if(theStartDate != "")  { 
-    temp_start_date = as.Date(theStartDate,format="%Y-%m-%d")
-    if (is.na(temp_start_date)) {
-      temp_start_date = as.Date(theStartDate,format="%d/%m/%Y")
-    }
-    if (is.na(temp_start_date)) {
-      temp_start_date = as.Date(theStartDate,format="%d.%m.%Y")
-    }
-  } else {
-    temp_start_date = Sys.Date()
-  }  
-  
-  #extract due if it was provided
-  temp = extract_parameter(raw_title, "DUE")
-  theDueDate = temp[1]
-  raw_title = temp[2]
-  
-  if(theDueDate != "")  { #if no bucket was provided we use the deault bucket
-    temp_due_date = as.Date(theDueDate,format="%Y-%m-%d")
-    if (is.na(temp_due_date)) {
-      temp_due_date = as.Date(theDueDate,format="%d/%m/%Y")
-    }
-    if (is.na(temp_due_date)) {
-      temp_due_date = as.Date(theDueDate,format="%d.%m.%Y")
-    }
-  } else {
-    temp_due_date = offset(Sys.Date(), DEFAULT_OFFSET, "EFSA")
-  }
-
-  #extract sharepoint folder path  if it was provided
-  temp = extract_parameter(raw_title, "PATH")
-  sp_folder_path = temp[1]
-  raw_title = temp[2]
-  
-  if(sp_folder_path == "")  { #if no bucket was provided we use the deault bucket
-    sp_folder_path = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(FolderPath))[[1]]
-  }  
-  
-  #extract assignee  if it was provided
-  temp = extract_parameter(raw_title, "ASSIGN")
-  new_assignee = temp[1]
-  raw_title = temp[2]
-  if (new_assignee !="") {
-    new_assignee = unlist(user_tib %>% filter(user_names == new_assignee) %>% select(user_ids))
-  }
-  
-  #steps: first extract parameter, then check if parameter fits one of the allowed names, then call (copy it from AutoAssign) update_inv_task
-  theTitle = paste("(", tx_id, ") ", 
-                   trimws(substr(raw_title, 1, 80)),
-                   sep="")
-
-#todo: gsub to clean filename
-  theFilename = trimws(substr(theTitle, 1, 40))
-  
-  theShortFilename = trimws(substr(theTitle, 1, 30))
-      
-  all_ids = retrieve_plan_id(c(plan_for_tx(tx_id), team_for_tx(tx_id)))
-
+#taskify create task
+taskify_create_task = function (all_ids, theBucket, thePlanName, theTitle, temp_start_date, temp_due_date, new_assignee) {
   ##task creation
   planId = all_ids[1]
   if(!is.na(theBucket)) {
@@ -865,11 +783,100 @@ taskify = function(curr_msg) {
                               body=new_task_json, http_verb=c ("POST"),encode = "raw")  
     
   }
-  
-  drive_id = all_ids[3]  
+}
 
+extract_bucket = function (raw_title, thePlan) {
+  #extract bucket if it was provided
+  temp = extract_parameter(raw_title, "BUCKET")
+  theBucket = temp[1]
+  raw_title = temp[2]
+  
+  if(theBucket == "")  { #if no bucket was provided we use the deault bucket
+    theBucket = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Defbucket))[[1]]
+  }  
+
+  theBucket  
+}
+
+#extract channel
+extract_channel = function (raw_title, thePlan) {
+  #extract channel  if it was provided
+  temp = extract_parameter(raw_title, "CHANNEL")
+  theChannel = temp[1]
+  raw_title = temp[2]
+  
+  if(theChannel == "")  { #if no bucket was provided we use the deault bucket
+    theChannel = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(DefChannel))[[1]]
+  }  
+  theChannel
+}
+
+extract_start_date = function (raw_title) {
+  #extract start if it was provided
+  temp = extract_parameter(raw_title, "START")
+  theStartDate = temp[1]
+  raw_title = temp[2]
+  
+  if(theStartDate != "")  { 
+    temp_start_date = as.Date(theStartDate,format="%Y-%m-%d")
+    if (is.na(temp_start_date)) {
+      temp_start_date = as.Date(theStartDate,format="%d/%m/%Y")
+    }
+    if (is.na(temp_start_date)) {
+      temp_start_date = as.Date(theStartDate,format="%d.%m.%Y")
+    }
+  } else {
+    temp_start_date = Sys.Date()
+  }  
+  temp_start_date
+}
+
+extract_due_date = function (raw_title) {
+  #extract due if it was provided
+  temp = extract_parameter(raw_title, "DUE")
+  theDueDate = temp[1]
+  raw_title = temp[2]
+  
+  if(theDueDate != "")  { #if no bucket was provided we use the deault bucket
+    temp_due_date = as.Date(theDueDate,format="%Y-%m-%d")
+    if (is.na(temp_due_date)) {
+      temp_due_date = as.Date(theDueDate,format="%d/%m/%Y")
+    }
+    if (is.na(temp_due_date)) {
+      temp_due_date = as.Date(theDueDate,format="%d.%m.%Y")
+    }
+  } else {
+    temp_due_date = offset(Sys.Date(), DEFAULT_OFFSET, "EFSA")
+  }
+  temp_due_date
+}
+
+extract_sp_folder_path= function (raw_title, thePlan) {
+#extract sharepoint folder path  if it was provided
+  temp = extract_parameter(raw_title, "PATH")
+  sp_folder_path = temp[1]
+  raw_title = temp[2]
+  
+  if(sp_folder_path == "")  { #if no bucket was provided we use the deault bucket
+    sp_folder_path = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(FolderPath))[[1]]
+  }  
+  sp_folder_path
+}
+
+extract_new_assignee = function (raw_title) {
+  #extract assignee  if it was provided
+  temp = extract_parameter(raw_title, "ASSIGN")
+  new_assignee = temp[1]
+  raw_title = temp[2]
+  if (new_assignee !="") {
+    new_assignee = unlist(user_tib %>% filter(user_names == new_assignee) %>% select(user_ids))
+  }
+  new_assignee
+}
+
+taskify_create_sharepoint_folder = function (drive_id, sp_folder_path, theShortFilename) {
   sp_folder_path = gsub(" ", "%20", sp_folder_path)
-    # create folder for the invoice checklist
+  # create folder for the invoice checklist
   parent_folder = call_graph_url(me$token,
                                  paste("https://graph.microsoft.com/v1.0/drives/",
                                        drive_id,
@@ -883,35 +890,39 @@ taskify = function(curr_msg) {
                          '@microsoft.graph.conflictBehavior' = "rename")
   new_folder_json = toJSON (new_folder_obj, auto_unbox = TRUE)
   new_folder_json = str_replace(new_folder_json, fixed("[]"), "{}")
-#todo: pay_folder are fixed strings in invoice importer; here they have to be found using info from plans_and_groups
   new_folder = call_graph_url(me$token,paste("https://graph.microsoft.com/beta/drives/",drive_id,"/items/",parent_folder$id,"/children", sep=""),  
                               body=new_folder_json, http_verb=c ("POST"),encode = "raw")  
-  
+
+}
+
+taskify_save_mail = function (curr_msg, tx_id, new_folder, drive_id) {
   # save the mail to the new folder
   print(paste("Saving the taskify mail to SP with subject ", curr_msg$subject, sep=""))
   # save mail to hd
-  write_mail(curr_msg, tx_id = tx_id)
+  mail_file_name = write_mail(curr_msg, tx_id = tx_id)
   # upload message to sp
-  upload_file(generate_file_name(curr_msg, tx_id = tx_id), "message/rfc822", new_folder$id, drive_id)      
-  # if there are attachments: save attachments to hd
-  #                           create subfolder for attachments
-  #                           upload attachments
-  if (curr_msg$hasAttachments) {
-    attachment_names_and_types = save_attachments(curr_msg)
-    new_folder_att = create_subfolder(generate_folder_name(curr_msg), new_folder$id, drive_id)
-    sapply(attachment_names_and_types, function (x) upload_file(x[[1]],x[[2]], new_folder_att$id, drive_id))
-    delete_temp_attachment_files(attachment_names_and_types)
+  if (grepl(" large mail see in outlook.html", mail_file_name)) {
+    new_file_id = upload_file(mail_file_name, "text/html", folder_id, drive_id)    
+  } else {
+    upload_file(generate_file_name(curr_msg, tx_id = tx_id), "message/rfc822", new_folder$id, drive_id)      
+    # if there are attachments: save attachments to hd
+    #                           create subfolder for attachments
+    #                           upload attachments
+    if (curr_msg$hasAttachments) {
+      attachment_names_and_types = save_attachments(curr_msg)
+      new_folder_att = create_subfolder(generate_folder_name(curr_msg), new_folder$id, drive_id)
+      sapply(attachment_names_and_types, function (x) upload_file(x[[1]],x[[2]], new_folder_att$id, drive_id))
+      delete_temp_attachment_files(attachment_names_and_types)
+    }
   }
   #delete the local copy
-  delete_temp_mail_file(curr_msg, tx_id = tx_id)
+  delete_temp_mail_file(mail_file_name)
+}
 
-  #prepare the links
-  folder_url_enc = str_replace_all(new_folder$webUrl, fixed(":"), "%3A")
-  folder_url_enc = str_replace_all(folder_url_enc, fixed("."), "%2E")
-  
+taskify_create_teams_conversation = function (new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc) {
   
   ##insert conversation post
-  group_id = all_ids[2]
+  
   channels = call_graph_url(me$token,
                             paste("https://graph.microsoft.com/v1.0/teams/",
                                   group_id,
@@ -957,8 +968,11 @@ taskify = function(curr_msg) {
                                     body=new_conversation_json, 
                                     http_verb=c ("POST"),
                                     encode = "raw")  
-  
-  ##update the task detilas to insert the link 
+  new_conversation
+}
+
+taskify_task_details = function (theBucket, folder_url_enc, new_folder, new_task) {
+##update the task detilas to insert the link 
   if (!is.na(theBucket)) {
     #prepare the description
     desc_prep = list()
@@ -986,10 +1000,41 @@ taskify = function(curr_msg) {
                    body=body_json, 
                    http_verb=c ("PATCH"),encode = "raw")
   }
-
-  
 }
 
+#taskify
+taskify = function(curr_msg) {
+  print(paste("taskify:", curr_msg$subject))
+  thePlan = strsplit(curr_msg$subject, " ")[[1]][[2]]
+  #use the plan to find the other information from the parameter table
+  thePlanName = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Plan))[[1]]
+  theMarker = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Marker))[[1]]
+  tx_id = paste("TX", theMarker, str_pad(round(runif(1) * 1000000,0), 6, pad=0), sep="")
+  raw_title = trimws(str_remove(str_remove(curr_msg$subject, "Taskify"), "TX[A-Z]"))
+  
+  theBucket = extract_bucket(raw_title, thePlan)
+  theChannel = extract_channel(raw_title, thePlan)
+  temp_start_date = extract_start_date(raw_title)
+  temp_due_date = extract_due_date(raw_title)
+  sp_folder_path = extract_sp_folder_path(raw_title, thePlan)
+  new_assignee = extract_new_assignee(raw_title)
+  
+  theTitle = paste("(", tx_id, ") ", trimws(substr(raw_title, 1, 80)), sep="")
+  theFilename = str_replace_all(str_replace_all(str_replace_all(str_replace_all(str_replace_all(trimws(substr(theTitle, 1, 40)), ":|/|&|\"|<|>", " "), fixed("*"), " "), fixed("?"), " "), fixed("\\"), " "), fixed("|"), " ")
+  theShortFilename = trimws(substr(theFilename, 1, 30))
+      
+  all_ids = retrieve_plan_id(c(plan_for_tx(tx_id), team_for_tx(tx_id)))
+  taskify_create_task(all_ids, theBucket, thePlanName, theTitle, temp_start_date, temp_due_date, new_assignee)
+  drive_id = all_ids[3]  
+  new_folder = taskify_create_sharepoint_folder (drive_id, sp_folder_path, theShortFilename)
+  taskify_save_mail(curr_msg, tx_id, new_folder, drive_id)  
+  group_id = all_ids[2]
+  folder_url_enc = str_replace_all(str_replace_all(new_folder$webUrl, fixed(":"), "%3A"), fixed("."), "%2E")
+  taskify_create_teams_conversation(new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc) 
+  taskify_task_details(theBucket, folder_url_enc, new_folder, new_task)
+  #set read anyway, even if must read, otherwise there will be a loop
+  set_read_flag(curr_msg)
+}
 
 #update task (sets new message category, eliminates waiting)
 update_inv_task = function(task_id) {
@@ -1049,6 +1094,138 @@ detect_current_user_assignee = function () {
   }
 }
 
+#tx_find_task
+#finds the planner task by tx_id
+tx_find_task = function(plan_id, tx_id) {
+  #search for task and check if it is assigned to the current user
+  task_tbl = extract_task_tbl(c(plan_for_tx(tx_id), plan_id))
+  right_task = task_tbl %>% filter(grepl(tx_id, title, ignore.case = TRUE))
+  task_id = right_task$id
+  task_id
+}
+
+tx_save_mail_to_sp = function (curr_msg, folder_id, drive_id) {
+  # save mail to hd
+  mail_file_name = write_mail(curr_msg)
+  # upload message to sp #bm
+  if (grepl(" large mail see in outlook.html", mail_file_name)) {
+    new_file_id = upload_file(mail_file_name, "text/html", folder_id, drive_id)      
+  } else {
+    new_file_id = upload_file(mail_file_name, "message/rfc822", folder_id, drive_id)      
+    # if there are attachments: save attachments to hd
+    #                           create subfolder for attachments
+    #                           upload attachments
+    if (curr_msg$hasAttachments) {
+      attachment_names_and_types = save_attachments(curr_msg)
+      new_folder = create_subfolder(generate_folder_name(curr_msg), folder_id, drive_id)
+      sapply(attachment_names_and_types, function (x) upload_file(x[[1]],x[[2]], new_folder$id, drive_id))
+      delete_temp_attachment_files(attachment_names_and_types)
+    }
+  }
+  #delete the local copy
+  delete_temp_mail_file(mail_file_name)
+  new_file_id
+}
+
+tx_retrieve_messages = function (group_id, channel_id) {
+  messages = call_graph_url(me$token,
+                            paste("https://graph.microsoft.com/beta/teams/",
+                                  group_id,
+                                  "/channels/",
+                                  channel_id,
+                                  "/messages?$top=50", 
+                                  sep=""))
+
+}
+
+tx_retrieve_subject_pos = function (tx_id, subjects, messages, group_id, channel_id) {
+  print(paste("before loop: length of subject list of new channel message slice", length(messages$value)))
+  print(paste("before loop: length of subject list of channel messages", length(subjects)))
+  
+  skip_value = 0
+  subject_pos = which(grepl(tx_id, subjects, ignore.case = TRUE))
+  
+  #todo: check regularly if MS implemented filter on the 
+  #query for channel messages; if that is the case, eliminate
+  #the loop and filter directly by 'contains the tx_id' 
+  while (length(messages$value) > 0 & length(subject_pos) == 0) {
+    skip_value = skip_value + 50
+    messages = call_graph_url(me$token,
+                              paste("https://graph.microsoft.com/beta/teams/",
+                                    group_id,
+                                    "/channels/",
+                                    channel_id,
+                                    "/messages?$top=50&$skip=", 
+                                    skip_value,
+                                    sep=""))
+    subjects = sapply(messages$value, function(x) x$subject)
+    print(paste("length of subject list of new channel message slice", length(messages$value)))
+    print(paste("length of subject list of channel messages", length(subjects)))
+    subject_pos = which(grepl(tx_id, subjects, ignore.case = TRUE))
+  }
+}
+
+tx_insert_new_conversation= function (messages, subject_pos, curr_msg, theSubject, new_file_id, group_id, channel_id) {
+  print(paste("number of messages found", length(subject_pos)))
+  message_id = messages$value[[subject_pos[[1]]]]$id #the [[1]] is needed because there might be more than one message with the code; we use the first one
+  unique_body = AzureGraph::call_graph_endpoint(token,paste("me/mailFolders/inbox/messages/",curr_msg$id,"?$select=uniqueBody",sep=""))
+  
+  new_conversation_prep = list(body=list(contentType = "html", 
+                                          content=paste("New mail from ",
+                                                        curr_msg$from$emailAddress$name, 
+                                                        " sent on ",
+                                                        curr_msg$sentDateTime,
+                                                        " (<a href='tempWebUrlUnenc'>link</a>)<br>",
+                                                        theSubject,
+                                                        "<br>",
+                                                        unique_body$uniqueBody$content,
+                                                        sep="")))
+  
+  new_conversation_json = toJSON(new_conversation_prep,auto_unbox=TRUE)
+  new_conversation_json = str_replace_all(new_conversation_json , "tempWebUrlUnenc", new_file_id$webUrl)
+  
+  new_conversation = call_graph_url(me$token,
+                                    paste("https://graph.microsoft.com/beta/teams/",
+                                          group_id,
+                                          "/channels/",
+                                          channel_id,
+                                          "/messages/",
+                                          message_id,
+                                          "/replies",
+                                          sep=""),  
+                                    body=new_conversation_json, 
+                                    http_verb=c ("POST"),
+                                    encode = "raw")  
+}
+
+tx_insert_post_in_conversation= function (curr_msg, tx_id, group_id, new_file_id) {
+  to_teams = grepl("TOTEAMS", curr_msg$subject, ignore.case = TRUE)
+  if (to_teams) {
+    theSubject = str_remove(str_remove(curr_msg$subject, "TOTEAMS"), "toteams")
+    theChannel = (plans_and_groups %>% filter(Marker == substr(tx_id, 3, 3)) %>% select(DefChannel))[[1]]
+    print(paste("going to insert new reply in channel", theChannel))
+    channels = call_graph_url(me$token,
+                              paste("https://graph.microsoft.com/v1.0/teams/",
+                                    group_id,
+                                    "/channels",
+                                    sep=""))
+    channel_names = sapply(channels$value, function(x) x$displayName)
+    right_channel = sapply(channel_names, function(x) grepl(theChannel, x, ignore.case = TRUE))
+    if(TRUE %in% right_channel) {
+      print(paste("the right channel was found"))
+      def_channel_pos = which(right_channel)[[1]]
+      channel_id = channels$value[[def_channel_pos]]$id
+      messages = tx_retrieve_messages(group_id, channel_id)
+      subjects = sapply(messages$value, function(x) x$subject)
+      subject_pos = tx_retrieve_subject_pos (tx_id, subjects, messages, group_id, channel_id)
+      
+      if(length(subject_pos) > 0) {
+        tx_insert_new_conversation(messages, subject_pos, curr_msg, theSubject, new_file_id, group_id, channel_id)
+      }
+    } 
+  }
+}
+
 #elaborate_tx
 # function that elaborates mails that have a transaction id
 # tx ids are detected by detect_tx
@@ -1057,12 +1234,9 @@ elaborate_tx = function(curr_msg) {
   tx_id = detect_tx(curr_msg$subject)
   if (tx_id != "") {
     all_ids = retrieve_plan_id(c(plan_for_tx(tx_id), team_for_tx(tx_id)))
+    plan_id = all_ids[1]
     if (!is.na(plan_for_tx(tx_id))) {
-      #search for task and check if it is assigned to the current user
-      plan_id = all_ids[1]
-      task_tbl = extract_task_tbl(c(plan_for_tx(tx_id), plan_id))
-      right_task = task_tbl %>% filter(grepl(tx_id, title, ignore.case = TRUE))
-      task_id = right_task$id
+      task_id = tx_find_task(plan_id, tx_id)
     } else {
       task_id = "NO PLAN"
     }
@@ -1074,26 +1248,16 @@ elaborate_tx = function(curr_msg) {
         #search for target folder; 
         drive_id = search_tx_drive(tx_id, team_for_tx(tx_id))
         folder_id = search_tx_folder(tx_id, drive_id)
-        #search for the mail in the folder by ID
-        saved_mail = search_mail_in_folder(curr_msg, folder_id, drive_id)    
+        if (folder_id != "") {
+          #search for the mail in the folder by ID
+          saved_mail = search_mail_in_folder(curr_msg, folder_id, drive_id)    
+        } else {
+          saved_mail = NULL
+        }
         #verify if mail was already saved in sp
         if (is.null(saved_mail)) {
           print(paste("Transferring to SP mail with subject ", curr_msg$subject, sep=""))
-          # save mail to hd
-          write_mail(curr_msg)
-          # upload message to sp
-          new_file_id = upload_file(generate_file_name(curr_msg), "message/rfc822", folder_id, drive_id)      
-          # if there are attachments: save attachments to hd
-          #                           create subfolder for attachments
-          #                           upload attachments
-          if (curr_msg$hasAttachments) {
-            attachment_names_and_types = save_attachments(curr_msg)
-            new_folder = create_subfolder(generate_folder_name(curr_msg), folder_id, drive_id)
-            sapply(attachment_names_and_types, function (x) upload_file(x[[1]],x[[2]], new_folder$id, drive_id))
-            delete_temp_attachment_files(attachment_names_and_types)
-          }
-          #delete the local copy
-          delete_temp_mail_file(curr_msg)
+          new_file_id = tx_save_mail_to_sp(curr_msg, folder_id, drive_id)
           # flag the planner task, but only if the message was not sent by the team
           if(!detect_own_message(curr_msg)) {
             update_inv_task(task_id)
@@ -1101,94 +1265,8 @@ elaborate_tx = function(curr_msg) {
           # search conversation with this id
           # add post to conversation with link to mail
           # adding posts was blocked after I received negative feedback about this feature
-          to_teams = grepl("TOTEAMS", curr_msg$subject, ignore.case = TRUE)
-          if (to_teams) {
-            theSubject = str_remove(str_remove(curr_msg$subject, "TOTEAMS"), "toteams")
-            group_id = all_ids[2]
-            theChannel = (plans_and_groups %>% filter(Marker == substr(tx_id, 3, 3)) %>% select(DefChannel))[[1]]
-            print(paste("going to insert new reply in channel", theChannel))
-            channels = call_graph_url(me$token,
-                                      paste("https://graph.microsoft.com/v1.0/teams/",
-                                            group_id,
-                                            "/channels",
-                                            sep=""))
-            channel_names = sapply(channels$value, function(x) x$displayName)
-            right_channel = sapply(channel_names, function(x) grepl(theChannel, x, ignore.case = TRUE))
-            if(TRUE %in% right_channel) {
-              print(paste("the right channel was found"))
-              def_channel_pos = which(right_channel)[[1]]
-              channel_id = channels$value[[def_channel_pos]]$id
-              
-              messages = call_graph_url(me$token,
-                                        paste("https://graph.microsoft.com/beta/teams/",
-                                              group_id,
-                                              "/channels/",
-                                              channel_id,
-                                              "/messages?$top=50", 
-                                              sep=""))
-              subjects = sapply(messages$value, function(x) x$subject)
-              
-              print(paste("before loop: length of subject list of new channel message slice", length(messages$value)))
-              print(paste("before loop: length of subject list of channel messages", length(subjects)))
-              
-              skip_value = 0
-              subject_pos = which(grepl(tx_id, subjects, ignore.case = TRUE))
-              
-              #todo: check regularly if MS implemented filter on the 
-              #query for channel messages; if that is the case, eliminate
-              #the loop and filter directly by 'contains the tx_id' 
-              while (length(messages$value) > 0 & length(subject_pos) == 0) {
-                skip_value = skip_value + 50
-                messages = call_graph_url(me$token,
-                                          paste("https://graph.microsoft.com/beta/teams/",
-                                                group_id,
-                                                "/channels/",
-                                                channel_id,
-                                                "/messages?$top=50&$skip=", 
-                                                skip_value,
-                                                sep=""))
-                subjects = sapply(messages$value, function(x) x$subject)
-                print(paste("length of subject list of new channel message slice", length(messages$value)))
-                print(paste("length of subject list of channel messages", length(subjects)))
-                subject_pos = which(grepl(tx_id, subjects, ignore.case = TRUE))
-              }
-              
-              if(length(subject_pos) > 0) {
-                print(paste("number of messages found", length(subject_pos)))
-                message_id = messages$value[[subject_pos[[1]]]]$id #the [[1]] is needed because there might be more than one message with the code; we use the first one
-                unique_body = AzureGraph::call_graph_endpoint(token,paste("me/mailFolders/inbox/messages/",curr_msg$id,"?$select=uniqueBody",sep=""))
-                
-                new_conversation_prep = list(body=list(contentType = "html", 
-                                                       content=paste("New mail from ",
-                                                                     curr_msg$from$emailAddress$name, 
-                                                                     " sent on ",
-                                                                     curr_msg$sentDateTime,
-                                                                     " (<a href='tempWebUrlUnenc'>link</a>)<br>",
-                                                                     theSubject,
-                                                                     "<br>",
-                                                                     unique_body$uniqueBody$content,
-                                                                     sep="")))
-                
-                new_conversation_json = toJSON(new_conversation_prep,auto_unbox=TRUE)
-                new_conversation_json = str_replace_all(new_conversation_json , "tempWebUrlUnenc", new_file_id$webUrl)
-                
-                new_conversation = call_graph_url(me$token,
-                                                  paste("https://graph.microsoft.com/beta/teams/",
-                                                        group_id,
-                                                        "/channels/",
-                                                        channel_id,
-                                                        "/messages/",
-                                                        message_id,
-                                                        "/replies",
-                                                        sep=""),  
-                                                  body=new_conversation_json, 
-                                                  http_verb=c ("POST"),
-                                                  encode = "raw")  
-                
-              }
-            }
-            
-          }
+          group_id = all_ids[2]
+          tx_insert_post_in_conversation(curr_msg, tx_id, group_id, new_file_id)
         }
       }
     }
@@ -1201,55 +1279,7 @@ elaborate_tx = function(curr_msg) {
   }
 }
 
-
-
 ##test
-if (mode == "test_TX") {
-}
-
-if (mode == "test_extract_parameter") {
-  print(extract_parameter("Taskify TXC BUCKET='to do' Do it", "BUCKET"))
-}
-
-if (mode == "test_search_tx") {
-  drive_id = search_tx_drive("TI052527", "Tech Specific Contract")
-  folder_id = search_tx_folder("TI052527",drive_id)
-}
-
-if (mode == "test_mime") {
-  write_mail(curr_msg)
-}
-
-if (mode == "test_search_in_folder") {
-  print(search_mail_in_folder (curr_msg, "01RTSAYT4J5ICNVIZSMZFKWESBYQABFUT5","b!wt8aOM7MVkS0m_DhdwDa3mzwuQ5ZoQdDjsFgvnewpev2F8IiPURjSriJ-blxYH7a") )
-}
-
-if (mode == "test_save_att") {
-  save_attachments(curr_msg)
-}
-
-
-if (mode == "test_set_read") {
-}
-
-if (mode == "test_upload_mail") {
-  upload_file("20200413 Re  Your reply to all is needed for submitted contract request  Test Contract  TI052527 MIDAAMkAD.eml","01RTSAYT4J5ICNVIZSMZFKWESBYQABFUT5","b!wt8aOM7MVkS0m_DhdwDa3mzwuQ5ZoQdDjsFgvnewpev2F8IiPURjSriJ-blxYH7a")
-}
-
-if (mode == "test_create_folder") {
-  create_subfolder ("pippo","01RTSAYT4J5ICNVIZSMZFKWESBYQABFUT5","b!wt8aOM7MVkS0m_DhdwDa3mzwuQ5ZoQdDjsFgvnewpev2F8IiPURjSriJ-blxYH7a") 
-}
-
-if (mode == "test_extract_tasks") {
-  plan_id = retrieve_plan_id(c(plan_for_tx("TXC123456"), team_for_tx("TXC123456")))[1]
-  task_tbl = extract_task_tbl(c(plan_for_tx("TSC123456"), plan_id))
-}
-
-
-if (mode == "test_update_task") {
-  update_inv_task("MHXP4_DpZUWCrgzrtucKvZYAFQhb", c())
-}
-
 ##main
 if (mode == "prod") {
   main()
