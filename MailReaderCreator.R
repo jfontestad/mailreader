@@ -1,5 +1,4 @@
 #MailReader.R
-# v 202008251022
 # Script that pre-elaborates mails and
 #  uniteresting ones: set to "read"
 #  transactions
@@ -360,7 +359,10 @@ search_tx_drive = function(name_component, team_name) {
 search_tx_folder = function(name_component, group_drive_id) {
   search_result = call_graph_url(me$token,
                                  paste("https://graph.microsoft.com/v1.0/drives/",group_drive_id,"/root/search(q='{",name_component,"}')", sep="")) 
-  result_id = search_result$value[[which(sapply(search_result$value, function(x) !is.null(x$folder)))]]$id
+  hits = sapply(search_result$value, function(x) !is.null(x$folder))
+  if (TRUE %in% hits) {
+    result_id = search_result$value[[which(hits)[[1]]]]$id
+  }
   result_id
 }
 
