@@ -27,6 +27,14 @@ stages:
         dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
         tags: |
           $(tag)
+- stage: Deploy
+  displayName: Deploy image
+  jobs:  
+  - job: Deploy
+    displayName: Deploy image
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
     - task: Kubernetes@1
       inputs:
         connectionType: 'Kubernetes Service Connection'
