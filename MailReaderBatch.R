@@ -65,7 +65,8 @@ to_groups = c("TeamTSTAServices@EFSA815.onmicrosoft.com",
 #ts ta team members mails; mails from these senders do not flag the task as "new message"
 tsta_member_mails = c("alessandro.gazzetta@efsa.europa.eu",
                       "mavra.nikolopoulou@efsa.europa.eu",
-                      "despoina.papadopoulou@efsa.europa.eu")
+                      "despoina.papadopoulou@efsa.europa.eu",
+                      "barbara.garetto@efsa.europa.eu")
 
 #save image to make sure the previous variables are saved
 save.image(file=paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
