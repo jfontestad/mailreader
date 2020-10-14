@@ -1009,6 +1009,8 @@ taskify_task_details = function (theBucket, folder_url_enc, new_folder, new_task
 #taskify
 taskify = function(curr_msg) {
   print(paste("taskify:", curr_msg$subject))
+  #set read anyway, even if must read, otherwise there will be a loop
+  set_read_flag(curr_msg)
   thePlan = strsplit(curr_msg$subject, " ")[[1]][[2]]
   #use the plan to find the other information from the parameter table
   thePlanName = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Plan))[[1]]
@@ -1036,8 +1038,6 @@ taskify = function(curr_msg) {
   folder_url_enc = str_replace_all(str_replace_all(new_folder$webUrl, fixed(":"), "%3A"), fixed("."), "%2E")
   taskify_create_teams_conversation(new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc) 
   taskify_task_details(theBucket, folder_url_enc, new_folder, new_task)
-  #set read anyway, even if must read, otherwise there will be a loop
-  set_read_flag(curr_msg)
 }
 
 #update task (sets new message category, eliminates waiting)
