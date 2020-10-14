@@ -11,7 +11,6 @@
 library(AzureGraph)
 library(AzureAuth)
 library(jsonlite)
-library(tidyverse)
 library(bizdays)
 library(httr)
 library(functional)
@@ -20,6 +19,10 @@ library (stringi)
 library(httpuv)
 library(collections)
 library(caTools)
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
 
 
 #scopes
@@ -496,7 +499,7 @@ save_attachments = function(curr_msg) {
       
       file_name = str_replace_all(att$name, "[^[:alnum:]]", " ")
       file_name = paste(file_name, ".eml", sep = "")
-      write(gsub("\r\n", "\n", the_attachment), file_name)
+      write(the_attachment, file_name)
     }
     attachment_names_and_types[[count]] = c(file_name, att$contentType)
     count = count + 1
@@ -506,7 +509,7 @@ save_attachments = function(curr_msg) {
 
 #upload_file
 upload_file = function(local_file_name, content_type, folder_id, drive_id) {
-  file_content = read_file_raw(file = local_file_name)
+  file_content = readBin(local_file_name, "raw", n=4000000L)
   call_graph_url(me$token,paste ("https://graph.microsoft.com/beta/drives/",
                                  drive_id,
                                  "/items/",
@@ -518,6 +521,7 @@ upload_file = function(local_file_name, content_type, folder_id, drive_id) {
                  add_headers  ("Content-Type"=content_type),
                  body=file_content, 
                  http_verb=c ("PUT"),encode = "raw")
+  file_content = NULL
 }
 
 #create_subfolder

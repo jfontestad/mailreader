@@ -17,6 +17,8 @@ RUN Rscript -e 'install.packages("AzureGraph", verbose=FALSE, quiet=TRUE)'
 RUN Rscript -e 'install.packages("httr", verbose=FALSE, quiet=TRUE)'
 RUN Rscript -e 'install.packages("httpuv", verbose=FALSE, quiet=TRUE)'
 RUN Rscript -e 'install.packages("jsonlite", verbose=FALSE, quiet=TRUE)'
-RUN Rscript -e 'install.packages("tidyverse", verbose=FALSE, quiet=TRUE)'
-CMD ["ifconfig -a"]
+RUN Rscript -e 'install.packages("readr", verbose=FALSE, quiet=TRUE)'
+RUN Rscript -e 'install.packages("purrr", verbose=FALSE, quiet=TRUE)'
+RUN Rscript -e 'install.packages("dplyr", verbose=FALSE, quiet=TRUE)'
+RUN Rscript -e 'install.packages("stringr", verbose=FALSE, quiet=TRUE)'
 CMD ["Rscript", "MailReaderBatch.R"]
