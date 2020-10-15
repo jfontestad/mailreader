@@ -764,6 +764,7 @@ update_inv_task = function(p_id, p_etag, new_assignee) {
 
 #taskify create task
 taskify_create_task = function (all_ids, theBucket, thePlanName, theTitle, temp_start_date, temp_due_date, new_assignee) {
+  new_task = NULL
   ##task creation
   planId = all_ids[1]
   if(!is.na(theBucket)) {
@@ -787,6 +788,7 @@ taskify_create_task = function (all_ids, theBucket, thePlanName, theTitle, temp_
                               body=new_task_json, http_verb=c ("POST"),encode = "raw")  
     
   }
+  new_task
 }
 
 extract_bucket = function (raw_title, thePlan) {
@@ -923,7 +925,7 @@ taskify_save_mail = function (curr_msg, tx_id, new_folder, drive_id) {
   delete_temp_mail_file(mail_file_name)
 }
 
-taskify_create_teams_conversation = function (new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc, theTitle) {
+taskify_create_teams_conversation = function (new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc, theTitle, new_task) {
   
   ##insert conversation post
   
@@ -1030,13 +1032,13 @@ taskify = function(curr_msg) {
   theShortFilename = trimws(substr(theFilename, 1, 30))
       
   all_ids = retrieve_plan_id(c(plan_for_tx(tx_id), team_for_tx(tx_id)))
-  taskify_create_task(all_ids, theBucket, thePlanName, theTitle, temp_start_date, temp_due_date, new_assignee)
+  new_task = taskify_create_task(all_ids, theBucket, thePlanName, theTitle, temp_start_date, temp_due_date, new_assignee)
   drive_id = all_ids[3]  
   new_folder = taskify_create_sharepoint_folder (drive_id, sp_folder_path, theShortFilename)
   taskify_save_mail(curr_msg, tx_id, new_folder, drive_id)  
   group_id = all_ids[2]
   folder_url_enc = str_replace_all(str_replace_all(new_folder$webUrl, fixed(":"), "%3A"), fixed("."), "%2E")
-  taskify_create_teams_conversation(new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc, theTitle) 
+  taskify_create_teams_conversation(new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc, theTitle, new_task) 
   taskify_task_details(theBucket, folder_url_enc, new_folder, new_task)
 }
 
