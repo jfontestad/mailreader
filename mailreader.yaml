@@ -5,4 +5,4 @@ metadata:
 spec:
   containers:
   - name: gazzettamail
-    image: efsadsreg.azurecr.io/mailreader09reattach
+    image: efsadsreg.azurecr.io/mailreader10fixtaskify

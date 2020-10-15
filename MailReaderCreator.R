@@ -923,7 +923,7 @@ taskify_save_mail = function (curr_msg, tx_id, new_folder, drive_id) {
   delete_temp_mail_file(mail_file_name)
 }
 
-taskify_create_teams_conversation = function (new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc) {
+taskify_create_teams_conversation = function (new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc, theTitle) {
   
   ##insert conversation post
   
@@ -1036,7 +1036,7 @@ taskify = function(curr_msg) {
   taskify_save_mail(curr_msg, tx_id, new_folder, drive_id)  
   group_id = all_ids[2]
   folder_url_enc = str_replace_all(str_replace_all(new_folder$webUrl, fixed(":"), "%3A"), fixed("."), "%2E")
-  taskify_create_teams_conversation(new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc) 
+  taskify_create_teams_conversation(new_folder, group_id, theChannel, curr_msg, theBucket, folder_url_enc, theTitle) 
   taskify_task_details(theBucket, folder_url_enc, new_folder, new_task)
 }
 
