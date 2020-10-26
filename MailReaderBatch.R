@@ -78,8 +78,8 @@ save.image(file=paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
 #print(paste("*** Mail reader closing at: ", Sys.time()))
 
 #repeated execution
-for (count in seq(32)) {
-    print(paste("start iteration ", count, sep=""))
+#for (count in seq(32)) {
+#    print(paste("start iteration ", count, sep=""))
     load(paste("/home/docker/myEnvironmentMailReader.RData",sep=""))
 
     print(paste("*** Mailreader starting at: ", Sys.time()))
@@ -92,9 +92,9 @@ for (count in seq(32)) {
 
     print("image saved, job completed")
 
-    Sys.sleep(900) #15 minutes intervals
+#    Sys.sleep(900) #15 minutes intervals
     
     print(paste("*** Mail Reader closing at: ", Sys.time()))
-}
+#}
 
 print(paste("*** Mail Reader fully closing at: ", Sys.time()))
