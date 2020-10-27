@@ -1017,6 +1017,7 @@ taskify = function(curr_msg) {
   #use the plan to find the other information from the parameter table
   thePlanName = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Plan))[[1]]
   theMarker = (plans_and_groups %>% filter(grepl(thePlan, PlanDetection, ignore.case = TRUE)) %>% select(Marker))[[1]]
+  set.seed(NULL) #truly make random numbers; otherwise we take the seed from the environment loaded in the batch script
   tx_id = paste("TX", theMarker, str_pad(round(runif(1) * 1000000,0), 6, pad=0), sep="")
   raw_title = trimws(str_remove(str_remove(curr_msg$subject, "Taskify"), "TX[A-Z]"))
   
