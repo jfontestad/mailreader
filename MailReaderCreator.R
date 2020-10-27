@@ -989,7 +989,7 @@ taskify_task_details = function (theBucket, folder_url_enc, new_folder, new_task
     #substitute after toJSON
     body_prep = list (previewType = "noPreview",
                       description="See attached mail for request details",
-                      references = list(tempWebUrlEnc = list(alias = "Checklist folder",
+                      references = list(tempWebUrlEnc = list(alias = "Supporting Docs",
                                                              '@odata.type' = "microsoft.graph.plannerExternalReference",
                                                              type = "Other")))
     body_json = toJSON (body_prep, auto_unbox=TRUE)
@@ -1024,11 +1024,17 @@ taskify = function(curr_msg) {
   raw_title = trimws(str_remove(str_remove(curr_msg$subject, "Taskify"), "TX[A-Z]"))
   
   theBucket = extract_bucket(raw_title, thePlan)
+  if (nchar(theBucket)>0) raw_title = str_remove(raw_title , paste("BUCKET=", theBucket, sep=""))
   theChannel = extract_channel(raw_title, thePlan)
+  if (nchar(theChannel)>0) raw_title = str_remove(raw_title , paste("CHANNEL=", theChannel, sep=""))
   temp_start_date = extract_start_date(raw_title)
+  if (nchar(temp_start_date)>0) raw_title = str_remove(raw_title , "START=[0-9]*/[0-9]*/[0-9]* ")
   temp_due_date = extract_due_date(raw_title)
+  if (nchar(temp_due_date)>0) raw_title = str_remove(raw_title , "DUE=[0-9]*/[0-9]*/[0-9]* ")
   sp_folder_path = extract_sp_folder_path(raw_title, thePlan)
+  if (nchar(sp_folder_path)>0) raw_title = str_remove(raw_title , paste("PATH=", sp_folder_path, sep=""))
   new_assignee = extract_new_assignee(raw_title)
+  if (nchar(new_assignee)>0) raw_title = str_remove(raw_title , "ASSIGN=[A-Z|a-z]* ")
   
   theTitle = paste("(", tx_id, ") ", trimws(substr(raw_title, 1, 80)), sep="")
   theFilename = str_replace_all(str_replace_all(str_replace_all(str_replace_all(str_replace_all(trimws(substr(theTitle, 1, 40)), ":|/|&|\"|<|>", " "), fixed("*"), " "), fixed("?"), " "), fixed("\\"), " "), fixed("|"), " ")
